@@ -1,27 +1,67 @@
-# pyrefly: ignore [missing-import]
 import bpy
-# pyrefly: ignore [missing-import]
 import mathutils
-# pyrefly: ignore [missing-import]
 from mathutils import Vector, noise
 import random
+import os
 
 # ==============================================================================
-#                  VOXEL MESH PRO - BLENDER PORT
+#                  VOXEL MESH PRO - BLENDER ADDON / SCRIPT
 # Replicates the VoxelMeshPro C# class for Unity inside Blender.
 # Includes 3D Perlin Noise, custom holes, rounding, and spherizing.
-# Compatible with Blender 2.80+ (tested on Blender 3.x and 4.x)
+# Loads materials dynamically from voxel_island_generator.blend.
 # ==============================================================================
 
 bl_info = {
     "name": "Voxel Island Generator (Voxel Mesh Pro)",
-    "author": "David Casas Vilasís",
-    "version": (1, 1),
+    "author": "Antigravity AI Port",
+    "version": (1, 3),
     "blender": (2, 80, 0),
     "location": "View3D > Sidebar > Voxel Mesh Pro",
-    "description": "Island generator based on voxels",
+    "description": "Procedural voxel island generator loading assets from voxel_island_generator.blend",
     "category": "Mesh",
 }
+
+# --- Paths & Asset Library Setup ---
+
+def get_blend_library_path():
+    # 1. Try to find it in the same directory as the script (when run as a ZIP addon)
+    try:
+        addon_dir = os.path.dirname(__file__)
+        path = os.path.join(addon_dir, "voxel_island_generator.blend")
+        if os.path.exists(path):
+            return path
+    except NameError:
+        pass
+        
+    # 2. Fallback to the project directory (when executed as a script or single-file addon)
+    fallback_dir = r"F:\OneDrive - UAB\1. Kosmikal\Tareas Universidad\4o\Integración de objetos\Modelos\Escenario\Islas\blender-voxel-island-generator"
+    path = os.path.join(fallback_dir, "voxel_island_generator.blend")
+    if os.path.exists(path):
+        return path
+        
+    return ""
+
+def import_material_from_library(material_name):
+    # If the material already exists in the current Blender file, reuse it
+    if material_name in bpy.data.materials:
+        return bpy.data.materials[material_name]
+        
+    blend_path = get_blend_library_path()
+    
+    # Import the material from voxel_island_generator.blend
+    if blend_path and os.path.exists(blend_path):
+        try:
+            with bpy.data.libraries.load(blend_path, link=False) as (data_from, data_to):
+                if material_name in data_from.materials:
+                    data_to.materials = [material_name]
+            
+            # Return the newly imported material
+            if material_name in bpy.data.materials:
+                return bpy.data.materials[material_name]
+        except Exception as e:
+            print(f"[VoxelMeshPro] Failed to import {material_name} from blend library: {e}")
+            
+    return None
 
 # --- Noise Helpers ---
 
@@ -29,8 +69,6 @@ def lerp(a, b, t):
     return a + (b - a) * t
 
 def perlin_2d(x, y):
-    # Map mathutils.noise [-1, 1] to Unity-like Mathf.PerlinNoise [0, 1]
-    # noise.noise accepts a mathutils.Vector
     val = noise.noise(Vector((x, y, 0.0)))
     val = (val + 1.0) * 0.5
     return max(0.0, min(1.0, val))
@@ -53,37 +91,27 @@ def is_solid_block(x, y, z, world_data, size_x, size_y, size_z):
     return world_data[x][y][z] == 1
 
 def is_adjacent_to_top_face(x, y, z, normal, world_data, size_x, size_y, size_z):
-    # normal is Vector in Unity space (so normal.y is vertical)
     if normal[1] == 1.0 or normal[1] == -1.0:
         return False
-    
-    # Unity code checks: if (!IsSolidBlock(x, y + 1, z)) return false;
     if not is_solid_block(x, y + 1, z, world_data, size_x, size_y, size_z):
         return False
-        
     return True
 
 def get_target_material_index(x, y, z, normal, world_data, size_x, size_y, size_z):
-    # normal is Vector in Unity space (so normal.y is vertical)
     if normal[1] == -1.0: # Down
-        return 0 # Bottom material (Voxel_Bottom)
+        return 0
     if normal[1] == 1.0: # Up
-        return 2 # Top material (Voxel_Top)
-        
-    # Check if adjacent to top face
+        return 2
     if is_adjacent_to_top_face(x, y, z, normal, world_data, size_x, size_y, size_z):
-        return 1 # General material (Voxel_General)
+        return 1
     else:
-        return 3 # Adjacent material (Voxel_Adjacent)
+        return 3
 
 def to_blender_coords(v_unity):
-    # Swap Y and Z: (x, y, z) in Unity -> (x, z, y) in Blender
     return Vector((v_unity[0], v_unity[2], v_unity[1]))
 
 def add_cube_face(vertices, faces, material_assignments, voxel_center_unity, normal_unity, material_index):
     half = 0.5
-    
-    # Vertices in Unity space
     face_vertices_unity = []
     if normal_unity == (0, 1, 0): # Up (+Y)
         face_vertices_unity = [
@@ -139,7 +167,6 @@ def add_cube_face(vertices, faces, material_assignments, voxel_center_unity, nor
 
 def aplicar_huecos_planos(world_data, size_x, size_y, size_z, huecos_planos):
     for hueco in huecos_planos:
-        # Convertir coordenadas
         centro_x = int(round(hueco['posicion'][0] + size_x * 0.5))
         centro_y = int(round(hueco['posicion'][1] + size_y * 0.5))
         centro_z = int(round(hueco['posicion'][2] + size_z * 0.5))
@@ -256,7 +283,8 @@ def setup_materials_on_mesh(mesh, settings):
         settings.adjacent_material
     ]
     
-    default_configs = [
+    # Names of materials expected to be inside voxel_island_generator.blend
+    blend_configs = [
         ("Voxel_Bottom", (0.35, 0.23, 0.15, 1.0)),      # Bottom face: soil
         ("Voxel_General", (0.45, 0.75, 0.35, 1.0)),     # Adjacent to top: light grass/dirt
         ("Voxel_Top", (0.3, 0.8, 0.2, 1.0)),            # Top face: bright grass
@@ -269,17 +297,22 @@ def setup_materials_on_mesh(mesh, settings):
         if mat is not None:
             mat_to_assign = mat
         else:
-            name, color = default_configs[i]
-            mat_default = bpy.data.materials.get(name)
-            if mat_default is None:
-                mat_default = bpy.data.materials.new(name=name)
-                mat_default.use_nodes = True
-                principled = mat_default.node_tree.nodes.get("Principled BSDF")
-                if principled:
-                    principled.inputs['Base Color'].default_value = color
-                # Viewport color for Solid Mode
-                mat_default.diffuse_color = color
-            mat_to_assign = mat_default
+            name, color = blend_configs[i]
+            # Try to load the material from the external blend file library
+            mat_library = import_material_from_library(name)
+            if mat_library is not None:
+                mat_to_assign = mat_library
+            else:
+                # Fallback to local procedural material if blend is missing or doesn't have it
+                mat_default = bpy.data.materials.get(name)
+                if mat_default is None:
+                    mat_default = bpy.data.materials.new(name=name)
+                    mat_default.use_nodes = True
+                    principled = mat_default.node_tree.nodes.get("Principled BSDF")
+                    if principled:
+                        principled.inputs['Base Color'].default_value = color
+                    mat_default.diffuse_color = color
+                mat_to_assign = mat_default
             
         mesh.materials.append(mat_to_assign)
 
@@ -406,7 +439,6 @@ def generate_voxel_mesh(context):
     mesh.from_pydata(vertices, [], faces)
     
     # Assign materials to the mesh BEFORE assigning face material indices.
-    # Otherwise, Blender clamps all face indices to 0 due to an empty slot list.
     setup_materials_on_mesh(mesh, settings)
     
     # Assign material index per face (now safe, won't be clamped to 0)
@@ -414,6 +446,26 @@ def generate_voxel_mesh(context):
         if i < len(material_assignments):
             face.material_index = material_assignments[i]
             
+    # 1. Update the mesh first to ensure all loops are initialized in Blender's memory
+    mesh.update()
+            
+    # 2. Create the UV Map and make it active
+    uv_layer = mesh.uv_layers.new(name="UVMap")
+    mesh.uv_layers.active = uv_layer
+    
+    # 3. Assign UV coordinates to each face loop
+    for face in mesh.polygons:
+        for loop_idx, loop in enumerate(face.loop_indices):
+            if loop_idx == 0:
+                uv_layer.data[loop].uv = (0.0, 0.0)
+            elif loop_idx == 1:
+                uv_layer.data[loop].uv = (1.0, 0.0)
+            elif loop_idx == 2:
+                uv_layer.data[loop].uv = (1.0, 1.0)
+            elif loop_idx == 3:
+                uv_layer.data[loop].uv = (0.0, 1.0)
+                
+    # 4. Final update to register the UV map coordinates
     mesh.update()
     
     # Store active object reference and deselect all to avoid editing other meshes
@@ -585,17 +637,12 @@ class VOXEL_PT_GeneratorPanel(bpy.types.Panel):
 # --- Voxel Hole Property Group & Operators ---
 
 class VoxelHoleProperty(bpy.types.PropertyGroup):
-    # pyre-ignore [invalid-annotation]
     pos_x: bpy.props.FloatProperty(name="Pos X", default=0.0)
-    # pyre-ignore [invalid-annotation]
     pos_y: bpy.props.FloatProperty(name="Pos Y", default=0.0)
-    # pyre-ignore [invalid-annotation]
     pos_z: bpy.props.FloatProperty(name="Pos Z", default=0.0)
-    # pyre-ignore [invalid-annotation]
+    
     size_x: bpy.props.IntProperty(name="Size X", default=1, min=1)
-    # pyre-ignore [invalid-annotation]
     size_y: bpy.props.IntProperty(name="Size Y", default=1, min=1)
-    # pyre-ignore [invalid-annotation]
     size_z: bpy.props.IntProperty(name="Size Z", default=1, min=1)
 
 class VOXEL_OT_AddHole(bpy.types.Operator):
@@ -625,60 +672,42 @@ class VOXEL_OT_RemoveHole(bpy.types.Operator):
 # --- Properties Registration ---
 
 class VoxelSettings(bpy.types.PropertyGroup):
-    # pyrefly: ignore [invalid-annotation]
     size_x: bpy.props.IntProperty(name="Width X", default=10, min=1)
-    # pyrefly: ignore [invalid-annotation]
     size_y: bpy.props.IntProperty(name="Length Y", default=10, min=1)
-    # pyrefly: ignore [invalid-annotation]
     size_z: bpy.props.IntProperty(name="Height Z", default=10, min=1)
-
-    # pyrefly: ignore [invalid-annotation]
+    
     random_fill: bpy.props.BoolProperty(name="Random Fill", default=False)
-    # pyrefly: ignore [invalid-annotation]
     fill_probability: bpy.props.FloatProperty(name="Fill Probability", default=0.5, min=0.0, max=1.0)
-
-    # pyrefly: ignore [invalid-annotation]
+    
     use_perlin_noise: bpy.props.BoolProperty(name="Use Perlin Noise", default=True)
-    # pyrefly: ignore [invalid-annotation]
     perlin_scale: bpy.props.FloatProperty(name="Perlin Scale", default=0.1, min=0.01)
-    # pyrefly: ignore [invalid-annotation]
     perlin_threshold: bpy.props.FloatProperty(name="Perlin Threshold", default=0.3, min=-1.0, max=1.0)
-    # pyrefly: ignore [invalid-annotation]
     perlin_offset: bpy.props.FloatVectorProperty(name="Perlin Offset", default=(0.0, 0.0, 0.0))
-    # pyrefly: ignore [invalid-annotation]
+    
     redondear_esquinas: bpy.props.BoolProperty(name="Round Corners", default=False)
-    # pyrefly: ignore [invalid-annotation]
     intensidad_redondeo: bpy.props.IntProperty(name="Rounding Intensity", default=1, min=1, max=10)
-
-    # pyrefly: ignore [invalid-annotation]
+    
     esferizar_malla: bpy.props.BoolProperty(name="Spherize Mesh", default=False)
-    # pyrefly: ignore [invalid-annotation]
     intensidad_esferizado: bpy.props.IntProperty(name="Spherize Intensity", default=1, min=1)
     
-    # pyrefly: ignore [invalid-annotation]
     bottom_material: bpy.props.PointerProperty(
         name="Bottom Material",
         type=bpy.types.Material
     )
-    # pyrefly: ignore [invalid-annotation]
     general_material: bpy.props.PointerProperty(
         name="General Material",
         type=bpy.types.Material
     )
-    # pyrefly: ignore [invalid-annotation]
     top_material: bpy.props.PointerProperty(
         name="Top Material",
         type=bpy.types.Material
     )
-    # pyrefly: ignore [invalid-annotation]
     adjacent_material: bpy.props.PointerProperty(
         name="Adjacent Material",
         type=bpy.types.Material
     )
     
-    # pyrefly: ignore [invalid-annotation]
     holes: bpy.props.CollectionProperty(type=VoxelHoleProperty)
-    # pyrefly: ignore [invalid-annotation]
     active_hole_index: bpy.props.IntProperty(name="Active Hole Index", default=0)
 
 classes = (
