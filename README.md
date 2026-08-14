@@ -14,7 +14,7 @@ Voxel Island Generator es un addon gratuito para Blender 5.2 que permite generar
 
 ## Instalación
 1. Descarga el archivo `voxel_island_generator.zip` de este repositorio.
-2. Abre Blender y ve a `Edit > Preferences > Add-ons` (o *Extensions* en Blender 4.2+).
+2. Abre Blender y ve a `Edit > Preferences > Add-ons` (o *Extensions* en Blender 5.2).
 3. Haz clic en **Install...** (o *Install from Disk*).
 4. Selecciona el archivo descargado y asegúrate de marcar la casilla para activarlo.
 5. Abre la barra lateral (`N`) en el Viewport 3D y busca la pestaña **Voxel Mesh Pro**.
