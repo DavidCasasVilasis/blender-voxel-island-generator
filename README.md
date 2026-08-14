@@ -2,7 +2,7 @@
 Blender plugin for procedurally generating voxel-based floating islands. Inspired by Minecraft.
 # Voxel Island Generator for Blender (Voxel Mesh Pro)
 
-Voxel Island Generator es un addon gratuito para Blender 2.80+ que permite generar mallas voxelizadas procedurales 3D directamente en la vista.
+Voxel Island Generator es un addon gratuito para Blender 5.2 que permite generar mallas voxelizadas procedurales 3D directamente en la vista.
 ![Texto alternativo del GIF](media/IslaGenerator.gif)
 
 ## Características
