@@ -13,7 +13,7 @@ Voxel Island Generator es un addon gratuito para Blender 5.2 que permite generar
 * **Slots de Materiales:** Asigna materiales diferentes de Blender de manera automática a la parte superior (césped), inferior (base/tierra), laterales y aristas.
 
 ## Instalación
-1. Descarga el archivo `voxel_island_generator.py` de este repositorio.
+1. Descarga el archivo `voxel_island_generator.zip` de este repositorio.
 2. Abre Blender y ve a `Edit > Preferences > Add-ons` (o *Extensions* en Blender 4.2+).
 3. Haz clic en **Install...** (o *Install from Disk*).
 4. Selecciona el archivo descargado y asegúrate de marcar la casilla para activarlo.
